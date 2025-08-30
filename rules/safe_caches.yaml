@@ -1,0 +1,10 @@
+# Minimal YAML-like rule pack parsed by Scanner
+- id: apple.caches.basic
+  path: "$HOME/Library/Caches"
+  min_age_days: 3
+  explain: "Standard caches: safe to remove; macOS will regenerate."
+
+- id: apple.logs.basic
+  path: "$HOME/Library/Logs"
+  min_age_days: 7
+  explain: "Logs older than a week."
