@@ -98,7 +98,7 @@ if [ -f "$APP_BUNDLE/Contents/Resources/${APP_NAME}.icns" ]; then
   echo "Info.plist updated with CFBundleIconFile"
 fi
 
-# Ensure QML copied
+# Copy QML into bundle (safe; macdeployqt may also copy when given -qmldir)
 if [ -d "$QML_SRC_DIR" ]; then
   mkdir -p "$QML_DST_DIR"
   cp -R "$QML_SRC_DIR"/* "$QML_DST_DIR"/ || true
@@ -133,22 +133,31 @@ if [ -z "$MACDEPLOYQT" ]; then
 fi
 echo "macdeployqt: $MACDEPLOYQT"
 
-# Decide whether to pass -qmldir: only pass when directory exists and contains QML files
-PASS_QMLDIR=0
-if [ -d "$QML_DST_DIR" ]; then
-  if find "$QML_DST_DIR" -type f \( -iname '*.qml' -o -iname '*.js' -o -iname 'qmldir' -o -iname '*.qmltypes' \) -print -quit | grep -q .; then
-    PASS_QMLDIR=1
-  else
-    echo "QML dir exists but contains no .qml/.js/qmldir files; skipping -qmldir to avoid macdeployqt error."
+# Choose which QML directory to pass to macdeployqt:
+MD_QML_DIR=""
+if [ -d "$QML_SRC_DIR" ]; then
+  if find "$QML_SRC_DIR" -type f \( -iname '*.qml' -o -iname '*.js' -o -iname 'qmldir' -o -iname '*.qmltypes' \) -print -quit | grep -q .; then
+    MD_QML_DIR="$QML_SRC_DIR"
+    echo "Will pass source QML dir to macdeployqt: $MD_QML_DIR"
   fi
+fi
+# Fallback: if no source QML, but bundle QML exists (copied earlier), use that
+if [ -z "$MD_QML_DIR" ] && [ -d "$QML_DST_DIR" ]; then
+  if find "$QML_DST_DIR" -type f \( -iname '*.qml' -o -iname '*.js' -o -iname 'qmldir' -o -iname '*.qmltypes' \) -print -quit | grep -q .; then
+    MD_QML_DIR="$QML_DST_DIR"
+    echo "No source QML found; will pass bundle QML dir to macdeployqt: $MD_QML_DIR"
+  fi
+fi
+if [ -z "$MD_QML_DIR" ]; then
+  echo "No QML path to pass to macdeployqt; calling without -qmldir"
 fi
 
 # Run macdeployqt capturing output; treat failure as fatal
 MD_OUT="$(mktemp)"
 set +e
-if [ "$PASS_QMLDIR" -eq 1 ]; then
-  echo "Running: $MACDEPLOYQT \"$APP_BUNDLE\" -qmldir \"$QML_DST_DIR\" -verbose=2"
-  "$MACDEPLOYQT" "$APP_BUNDLE" -qmldir "$QML_DST_DIR" -verbose=2 >"$MD_OUT" 2>&1
+if [ -n "$MD_QML_DIR" ]; then
+  echo "Running: $MACDEPLOYQT \"$APP_BUNDLE\" -qmldir \"$MD_QML_DIR\" -verbose=2"
+  "$MACDEPLOYQT" "$APP_BUNDLE" -qmldir "$MD_QML_DIR" -verbose=2 >"$MD_OUT" 2>&1
   MD_EXIT=$?
 else
   echo "Running: $MACDEPLOYQT \"$APP_BUNDLE\" -verbose=2"
@@ -159,7 +168,7 @@ set -e
 
 if [ "$MD_EXIT" -ne 0 ]; then
   echo "macdeployqt failed (exit $MD_EXIT). Log:"
-  sed -n '1,200p' "$MD_OUT" || true
+  sed -n '1,300p' "$MD_OUT" || true
   echo "Full log saved to: $MD_OUT"
   echo "Aborting packaging because bundle is incomplete."
   exit 1

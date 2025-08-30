@@ -6,7 +6,7 @@ ApplicationWindow {
     width: 800
     height: 600
     visible: true
-    title: "MacCleaner - Demo"
+    title: "MacCleaner"
     color: "#f0f0f0"  // Subtle background
 
     // Global style properties for consistency
