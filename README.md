@@ -59,3 +59,6 @@ Contact / Repository
 --------------------
 - Keep README.md or release notes in your repo with the generated .dmg attached to releases.
 
+Attributions
+------------
+- Processor.png on AppIcon by: <a href="https://www.flaticon.com/free-icons/processor" title="processor icons">Processor icons created by Those Icons - Flaticon</a>
