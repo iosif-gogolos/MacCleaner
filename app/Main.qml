@@ -38,7 +38,7 @@ ApplicationWindow {
             Button {
                 id: scanButton
                 text: "Start Scan"
-                enabled: !scanner.scanning  // Disable during scan
+                enabled: !scanner.scanning
                 onClicked: {
                     junkModel.clear()
                     scanner.startScan()
@@ -92,13 +92,30 @@ ApplicationWindow {
                 color: style.textColor
                 verticalAlignment: Text.AlignVCenter
             }
-
-            // Progress indicator during scan
-            BusyIndicator {
-                running: scanner.scanning
-                visible: running
-                width: 24
+            // Progress bar and storage label
+            ProgressBar {
+                id: scanProgressBar
+                visible: scanner.scanning
+                value: scanner.progress
+                width: 180
                 height: 24
+            }
+            Label {
+                id: storageLabel
+                visible: scanner.scanning
+                font.pixelSize: style.fontSize
+                color: style.textColor
+                verticalAlignment: Text.AlignVCenter
+                text: {
+                    let bytes = scanner.totalBytesFound || 0;
+                    let mb = bytes / (1024 * 1024);
+                    if (mb < 999) {
+                        return mb.toFixed(1) + " MB";
+                    } else {
+                        let gb = mb / 1024;
+                        return gb.toFixed(1) + " GB";
+                    }
+                }
             }
         }
 

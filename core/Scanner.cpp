@@ -3,6 +3,7 @@
 #include <sstream>
 #include <chrono>
 #include <sys/stat.h>
+#include <QThread>
 
 Scanner::Scanner(QObject* parent) : QObject(parent) {}
 Scanner::~Scanner() = default;
@@ -78,7 +79,7 @@ bool Scanner::parseSimpleYaml(const QString& text) {
 }
 
 void Scanner::startScan() {
-    // prepare state
+    if (m_scanning) return;
     m_scanning = true;
     m_filesScanned = 0;
     m_currentPath.clear();
@@ -86,15 +87,21 @@ void Scanner::startScan() {
     emit scanningChanged();
     emit scanPhaseChanged(m_currentPhase);
 
-    for (const auto& r : m_rules) {
-        scanRule(r);
-    }
-
-    m_scanning = false;
-    m_currentPhase = "Scan complete";
-    emit scanPhaseChanged(m_currentPhase);
-    emit scanningChanged();
-    emit scanFinished();
+    // Run scan in a worker thread so UI updates
+    QThread* worker = QThread::create([this]() {
+        for (const auto& r : m_rules) {
+            scanRule(r);
+        }
+        QMetaObject::invokeMethod(this, [this]() {
+            m_scanning = false;
+            m_currentPhase = "Scan complete";
+            emit scanPhaseChanged(m_currentPhase);
+            emit scanningChanged();
+            emit scanFinished();
+        }, Qt::QueuedConnection);
+    });
+    connect(worker, &QThread::finished, worker, &QObject::deleteLater);
+    worker->start();
 }
 
 #include <filesystem>
@@ -123,7 +130,10 @@ void Scanner::scanRule(const Rule& r) {
     using namespace std::chrono;
     auto now = system_clock::now();
     auto cutoff = now - hours(24 * std::max(0, r.min_age_days));
-
+    
+    int totalFiles = 0;
+    
+    int scannedFiles = 0;
     for (auto it = fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
         const fs::path p = it->path();
         std::error_code st_ec;
@@ -137,7 +147,9 @@ void Scanner::scanRule(const Rule& r) {
         uint64_t sz = 0;
         if (fs::is_regular_file(p, st_ec)) {
             sz = (uint64_t)fs::file_size(p, st_ec);
-        } else {
+            m_totalBytesFound += sz;
+            emit totalBytesFoundChanged();
+        }else {
             // approximate directory size as zero for quick scan
             sz = 0;
         }
@@ -153,5 +165,10 @@ void Scanner::scanRule(const Rule& r) {
         emit progressUpdated(m_filesScanned, m_currentPath);
 
         emit found(f);
+
+        
+        scannedFiles++;
+        m_progress = totalFiles > 0 ? (double)scannedFiles / totalFiles : 0.0;
+        emit progressChanged();
     }
 }
